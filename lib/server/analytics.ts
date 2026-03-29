@@ -1,6 +1,3 @@
-import { cache } from "react"
-
-import { analyticsCacheSeconds } from "./env"
 import { getAllEntries, groupBy } from "./google-sheet"
 import type { AnalyticsSummary, FiltersResponse, TimeEntry } from "./types"
 
@@ -43,8 +40,8 @@ function collectHours(entries: TimeEntry[]): number {
   return entries.reduce((sum, entry) => sum + entry.hours, 0)
 }
 
-export const getAnalyticsSummary = cache(async (): Promise<AnalyticsSummary> => {
-  const entries = await getAllEntries()
+export async function getAnalyticsSummary(forceRefresh = false): Promise<AnalyticsSummary> {
+  const entries = await getAllEntries(forceRefresh)
   const totalHours = collectHours(entries)
   const totalEntries = entries.length
 
@@ -85,9 +82,4 @@ export const getAnalyticsSummary = cache(async (): Promise<AnalyticsSummary> => 
     hoursByWorkType,
     updatedAt: new Date().toISOString(),
   }
-})
-
-export async function getAnalyticsSummaryWithExpiry() {
-  const summary = await getAnalyticsSummary()
-  return summary
 }

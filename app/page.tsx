@@ -11,6 +11,8 @@ import { RecentActivity } from "@/components/dashboard/recent-activity"
 import { StatsCards } from "@/components/dashboard/stats-cards"
 import { TimeChart } from "@/components/dashboard/time-chart"
 import { WorkTypesChart } from "@/components/dashboard/work-types-chart"
+import { Button } from "@/components/ui/button"
+import { RotateCcw } from "lucide-react"
 import {
   DEFAULT_FILTERS,
   type DashboardFilters,
@@ -38,6 +40,7 @@ export default function Dashboard() {
   const [options, setOptions] = useState(INITIAL_OPTIONS)
   const [isFiltersLoading, setIsFiltersLoading] = useState(true)
   const [isDataLoading, setIsDataLoading] = useState(true)
+  const [refreshVersion, setRefreshVersion] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -82,10 +85,20 @@ export default function Dashboard() {
           }
         })
 
-        const query = params.toString()
+        const dataParams = new URLSearchParams(params)
+        const summaryParams = new URLSearchParams()
+        if (refreshVersion) {
+          dataParams.append("refresh", "1")
+          summaryParams.append("refresh", "1")
+        }
+        const dataQuery = dataParams.toString()
+        const summaryQuery = summaryParams.toString()
+        const dataUrl = `/api/data${dataQuery ? `?${dataQuery}` : ""}`
+        const summaryUrl = `/api/analytics/summary${summaryQuery ? `?${summaryQuery}` : ""}`
+
         const [dataRes, summaryRes] = await Promise.all([
-          fetch(`/api/data${query ? `?${query}` : ""}`, { signal: controller.signal }),
-          fetch("/api/analytics/summary", { signal: controller.signal }),
+          fetch(dataUrl, { signal: controller.signal, cache: "no-store" }),
+          fetch(summaryUrl, { signal: controller.signal, cache: "no-store" }),
         ])
 
         if (!dataRes.ok) throw new Error("Failed to load data")
@@ -113,7 +126,7 @@ export default function Dashboard() {
     }
     loadData()
     return () => controller.abort()
-  }, [filters.employee, filters.client, filters.workType, filters.period])
+  }, [filters.employee, filters.client, filters.workType, filters.period, refreshVersion])
 
   const filteredEntries = useMemo(() => filterEntries(entries, filters), [entries, filters])
   const derivedSummary = useMemo(() => {
@@ -132,6 +145,7 @@ export default function Dashboard() {
   }
 
   const resetFilters = () => setFilters(DEFAULT_FILTERS)
+  const triggerRefresh = () => setRefreshVersion((prev) => prev + 1)
 
   return (
     <div className="min-h-screen bg-background">
@@ -144,6 +158,17 @@ export default function Dashboard() {
         />
 
         <div className="p-8 space-y-8">
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={triggerRefresh}
+              disabled={isDataLoading}
+            >
+              <RotateCcw className="h-4 w-4 mr-2" /> Обновить данные
+            </Button>
+          </div>
           <StatsCards summary={derivedSummary} isLoading={isDataLoading} />
           <Filters
             filters={filters}

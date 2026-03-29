@@ -1,7 +1,6 @@
-import { cache } from "react"
 import Papa from "papaparse"
 
-import { sheetSources, sheetsCacheSeconds } from "./env"
+import { isProduction, sheetSources, sheetsCacheSeconds } from "./env"
 import type { SheetSource, TimeEntry } from "./types"
 
 const CSV_ENDPOINT = "https://docs.google.com/spreadsheets/d"
@@ -105,14 +104,14 @@ function normalizeRow(row: RawRow, index: number, source: SheetSource): TimeEntr
   }
 }
 
-async function fetchSheet(source: SheetSource): Promise<TimeEntry[]> {
+async function fetchSheet(source: SheetSource, forceRefresh = false): Promise<TimeEntry[]> {
   const gidParam = source.gid ? `/export?format=csv&gid=${source.gid}` : "/export?format=csv"
   const url = `${CSV_ENDPOINT}/${source.id}${gidParam}`
 
   const response = await fetch(url, {
     method: "GET",
-    cache: "force-cache",
-    next: { revalidate: sheetsCacheSeconds },
+    cache: !isProduction || forceRefresh ? "no-store" : "force-cache",
+    next: !isProduction || forceRefresh ? undefined : { revalidate: sheetsCacheSeconds },
   })
 
   if (!response.ok) {
@@ -137,13 +136,34 @@ async function fetchSheet(source: SheetSource): Promise<TimeEntry[]> {
   return entries
 }
 
-export const getAllEntries = cache(async () => {
-  const entriesArrays = await Promise.all(sheetSources.map(fetchSheet))
-  return entriesArrays.flat()
-})
+let cachedEntries: { expires: number; data: TimeEntry[] } | null = null
 
-export async function getEntriesBySheet(sheetId?: string): Promise<TimeEntry[]> {
-  const entries = await getAllEntries()
+async function loadEntries(forceRefresh = false) {
+  if (!forceRefresh && isProduction && cachedEntries && cachedEntries.expires > Date.now()) {
+    return cachedEntries.data
+  }
+
+  const entriesArrays = await Promise.all(sheetSources.map((source) => fetchSheet(source, forceRefresh)))
+  const data = entriesArrays.flat()
+
+  if (isProduction && !forceRefresh && sheetsCacheSeconds > 0) {
+    cachedEntries = {
+      data,
+      expires: Date.now() + sheetsCacheSeconds * 1000,
+    }
+  } else {
+    cachedEntries = null
+  }
+
+  return data
+}
+
+export async function getAllEntries(forceRefresh = false) {
+  return loadEntries(forceRefresh || !isProduction)
+}
+
+export async function getEntriesBySheet(sheetId?: string, forceRefresh = false): Promise<TimeEntry[]> {
+  const entries = await getAllEntries(forceRefresh)
   if (!sheetId) return entries
   return entries.filter((entry) => entry.sheetId === sheetId)
 }
