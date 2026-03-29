@@ -96,6 +96,13 @@ export default function Dashboard() {
         const dataUrl = `/api/data${dataQuery ? `?${dataQuery}` : ""}`
         const summaryUrl = `/api/analytics/summary${summaryQuery ? `?${summaryQuery}` : ""}`
 
+        console.log("[dashboard] fetch start", {
+          filtersSnapshot: { ...filters },
+          refreshVersion,
+          dataUrl,
+          summaryUrl,
+        })
+
         const [dataRes, summaryRes] = await Promise.all([
           fetch(dataUrl, { signal: controller.signal, cache: "no-store" }),
           fetch(summaryUrl, { signal: controller.signal, cache: "no-store" }),
@@ -109,6 +116,17 @@ export default function Dashboard() {
         setEntries(dataJson.entries ?? [])
         setSummary(summaryJson)
 
+        console.log("[dashboard] fetch success", {
+          refreshVersion,
+          dataServerTime: dataJson.serverTime,
+          dataFetchedAt: dataJson.fetchedAt,
+          entriesCount: dataJson.entries?.length ?? 0,
+          summaryServerTime: summaryJson?.serverTime,
+          summaryFetchedAt: summaryJson?.fetchedAt,
+          summaryTotalEntries: summaryJson?.totalEntries,
+          summaryTotalHours: summaryJson?.totalHours,
+        })
+
         const periods = [DEFAULT_FILTERS.period, ...extractPeriods(dataJson.entries ?? [])]
         setOptions((prev) => ({ ...prev, periods }))
         if (!periods.includes(filters.period)) {
@@ -116,7 +134,7 @@ export default function Dashboard() {
         }
       } catch (err) {
         if (controller.signal.aborted) return
-        console.error("loadData", err)
+        console.error("loadData", { refreshVersion, err })
         setError("Не удалось загрузить данные. Попробуйте обновить страницу.")
       } finally {
         if (!controller.signal.aborted) {
@@ -145,7 +163,12 @@ export default function Dashboard() {
   }
 
   const resetFilters = () => setFilters(DEFAULT_FILTERS)
-  const triggerRefresh = () => setRefreshVersion((prev) => prev + 1)
+  const triggerRefresh = () =>
+    setRefreshVersion((prev) => {
+      const nextValue = prev + 1
+      console.log("[dashboard] refresh button clicked", { nextValue })
+      return nextValue
+    })
 
   return (
     <div className="min-h-screen bg-background">

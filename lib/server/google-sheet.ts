@@ -1,6 +1,6 @@
 import Papa from "papaparse"
 
-import { isProduction, sheetSources, sheetsCacheSeconds } from "./env"
+import { sheetSources } from "./env"
 import type { SheetSource, TimeEntry } from "./types"
 
 const CSV_ENDPOINT = "https://docs.google.com/spreadsheets/d"
@@ -104,14 +104,16 @@ function normalizeRow(row: RawRow, index: number, source: SheetSource): TimeEntr
   }
 }
 
-async function fetchSheet(source: SheetSource, forceRefresh = false): Promise<TimeEntry[]> {
+async function fetchSheet(source: SheetSource): Promise<TimeEntry[]> {
   const gidParam = source.gid ? `/export?format=csv&gid=${source.gid}` : "/export?format=csv"
   const url = `${CSV_ENDPOINT}/${source.id}${gidParam}`
+  const fetchStarted = Date.now()
+  const fetchedAt = new Date().toISOString()
 
   const response = await fetch(url, {
     method: "GET",
-    cache: !isProduction || forceRefresh ? "no-store" : "force-cache",
-    next: !isProduction || forceRefresh ? undefined : { revalidate: sheetsCacheSeconds },
+    cache: "no-store",
+    next: { revalidate: 0 },
   })
 
   if (!response.ok) {
@@ -129,43 +131,51 @@ async function fetchSheet(source: SheetSource, forceRefresh = false): Promise<Ti
     .map((row: RawRow, index: number) => normalizeRow(row, index + 2, source))
     .filter((row): row is TimeEntry => Boolean(row))
 
-  if (process.env.NODE_ENV !== "production") {
-    console.info(`[sheets] ${source.name}: ${parsed.data.length} rows -> ${entries.length} entries`)
-  }
+  console.info(`[sheets] ${source.name}`, {
+    fetchedAt,
+    durationMs: Date.now() - fetchStarted,
+    rawRows: parsed.data.length,
+    normalizedEntries: entries.length,
+    sampleRowIndex: entries.slice(0, 3).map((entry) => entry.rowIndex),
+  })
 
   return entries
 }
 
-let cachedEntries: { expires: number; data: TimeEntry[] } | null = null
-
-async function loadEntries(forceRefresh = false) {
-  if (!forceRefresh && isProduction && cachedEntries && cachedEntries.expires > Date.now()) {
-    return cachedEntries.data
-  }
-
-  const entriesArrays = await Promise.all(sheetSources.map((source) => fetchSheet(source, forceRefresh)))
-  const data = entriesArrays.flat()
-
-  if (isProduction && !forceRefresh && sheetsCacheSeconds > 0) {
-    cachedEntries = {
-      data,
-      expires: Date.now() + sheetsCacheSeconds * 1000,
-    }
-  } else {
-    cachedEntries = null
-  }
-
-  return data
+type LoadedEntries = {
+  entries: TimeEntry[]
+  fetchedAt: string
 }
 
-export async function getAllEntries(forceRefresh = false) {
-  return loadEntries(forceRefresh || !isProduction)
+async function loadEntries(): Promise<LoadedEntries> {
+  const startedAt = Date.now()
+  const entriesArrays = await Promise.all(sheetSources.map((source) => fetchSheet(source)))
+  const entries = entriesArrays.flat()
+  const fetchedAt = new Date().toISOString()
+
+  console.info("[sheets] aggregated", {
+    fetchedAt,
+    durationMs: Date.now() - startedAt,
+    totalEntries: entries.length,
+    sample: entries.slice(0, 3).map((entry) => ({ sheetId: entry.sheetId, rowIndex: entry.rowIndex })),
+  })
+
+  return { entries, fetchedAt }
 }
 
-export async function getEntriesBySheet(sheetId?: string, forceRefresh = false): Promise<TimeEntry[]> {
-  const entries = await getAllEntries(forceRefresh)
-  if (!sheetId) return entries
-  return entries.filter((entry) => entry.sheetId === sheetId)
+export async function getAllEntries(): Promise<LoadedEntries> {
+  return loadEntries()
+}
+
+export async function getEntriesBySheet(sheetId?: string): Promise<LoadedEntries> {
+  const { entries, fetchedAt } = await getAllEntries()
+  if (!sheetId) {
+    return { entries, fetchedAt }
+  }
+  return {
+    entries: entries.filter((entry) => entry.sheetId === sheetId),
+    fetchedAt,
+  }
 }
 
 export function groupBy<T, Key extends string | number>(items: T[], getKey: (item: T) => Key) {

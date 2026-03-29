@@ -39,10 +39,4 @@ function parseSources(): SheetSource[] {
 }
 
 export const sheetSources: SheetSource[] = parseSources()
-
-const defaultCacheSeconds = process.env.NODE_ENV === "production" ? 60 : 0
-
-export const sheetsCacheSeconds = Number(process.env.SHEETS_CACHE_SECONDS ?? defaultCacheSeconds)
-export const analyticsCacheSeconds = Number(process.env.ANALYTICS_CACHE_SECONDS ?? defaultCacheSeconds)
 export const defaultTimezone = process.env.DEFAULT_TIMEZONE ?? "Europe/Moscow"
-export const isProduction = process.env.NODE_ENV === "production"

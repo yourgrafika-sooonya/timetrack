@@ -9,8 +9,9 @@ export const fetchCache = "force-no-store"
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const debug = searchParams.has("debug")
-  const summary = await getAnalyticsSummary({ forceRefresh: true, debug })
-  return NextResponse.json(summary, {
+  const summary = await getAnalyticsSummary({ debug })
+  const serverTime = new Date().toISOString()
+  return NextResponse.json({ ...summary, serverTime }, {
     headers: {
       "Cache-Control": "no-store, max-age=0",
       "CDN-Cache-Control": "no-store",

@@ -46,4 +46,6 @@ export interface AnalyticsSummary {
   hoursByClient: Array<{ client: string; hours: number }>
   hoursByWorkType: Array<{ workType: string; hours: number }>
   updatedAt: string
+  fetchedAt?: string
+  serverTime?: string
 }

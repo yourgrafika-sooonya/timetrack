@@ -2,7 +2,7 @@ import { getAllEntries, groupBy } from "./google-sheet"
 import type { AnalyticsSummary, FiltersResponse, TimeEntry } from "./types"
 
 export async function getFilters(): Promise<FiltersResponse> {
-  const entries = await getAllEntries()
+  const { entries } = await getAllEntries()
   const employees = new Set<string>()
   const clients = new Set<string>()
   const workTypes = new Set<string>()
@@ -41,13 +41,12 @@ function collectHours(entries: TimeEntry[]): number {
 }
 
 type AnalyticsSummaryOptions = {
-  forceRefresh?: boolean
   debug?: boolean
 }
 
 export async function getAnalyticsSummary(options: AnalyticsSummaryOptions = {}): Promise<AnalyticsSummary> {
-  const { forceRefresh = false, debug = false } = options
-  const entries = await getAllEntries(forceRefresh)
+  const { debug = false } = options
+  const { entries, fetchedAt } = await getAllEntries()
   const totalHours = collectHours(entries)
   const totalEntries = entries.length
 
@@ -56,7 +55,7 @@ export async function getAnalyticsSummary(options: AnalyticsSummaryOptions = {})
       timestamp: new Date().toISOString(),
       totalEntries,
       totalHours,
-      forceRefresh,
+      fetchedAt,
     })
   }
 
@@ -96,5 +95,6 @@ export async function getAnalyticsSummary(options: AnalyticsSummaryOptions = {})
     hoursByClient,
     hoursByWorkType,
     updatedAt: new Date().toISOString(),
+    fetchedAt,
   }
 }
