@@ -40,10 +40,25 @@ function collectHours(entries: TimeEntry[]): number {
   return entries.reduce((sum, entry) => sum + entry.hours, 0)
 }
 
-export async function getAnalyticsSummary(forceRefresh = false): Promise<AnalyticsSummary> {
+type AnalyticsSummaryOptions = {
+  forceRefresh?: boolean
+  debug?: boolean
+}
+
+export async function getAnalyticsSummary(options: AnalyticsSummaryOptions = {}): Promise<AnalyticsSummary> {
+  const { forceRefresh = false, debug = false } = options
   const entries = await getAllEntries(forceRefresh)
   const totalHours = collectHours(entries)
   const totalEntries = entries.length
+
+  if (debug) {
+    console.log("[analytics] summary recomputed", {
+      timestamp: new Date().toISOString(),
+      totalEntries,
+      totalHours,
+      forceRefresh,
+    })
+  }
 
   const employeesGroups = groupBy(entries, (entry) => entry.employee || "unknown")
   const topEmployees = Object.entries(employeesGroups)
